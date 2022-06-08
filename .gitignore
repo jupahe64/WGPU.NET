@@ -2,3 +2,5 @@
 */obj/*
 .vs/
 NugetPacking/
+/WGPU.Tests/WGPU.Tests.csproj.user
+/WGPU.Tests/Properties/PublishProfiles

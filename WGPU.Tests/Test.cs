@@ -1,4 +1,5 @@
-﻿using Silk.NET.GLFW;
+﻿using ImGuiNET;
+using Silk.NET.GLFW;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using System;
@@ -6,7 +7,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using System.Threading;
 using WGPU.NET;
 using Image = SixLabors.ImageSharp.Image;
 
@@ -385,6 +385,26 @@ namespace WGPU.Tests
 
 			glfw.GetWindowSize(window, out int prevWidth, out int prevHeight);
 
+			colorTargets[0].BlendState = new Wgpu.BlendState
+			{
+				color = new Wgpu.BlendComponent
+				{
+					srcFactor = Wgpu.BlendFactor.SrcAlpha,
+					dstFactor = Wgpu.BlendFactor.OneMinusSrcAlpha,
+					operation = Wgpu.BlendOperation.Add
+				},
+				alpha = new Wgpu.BlendComponent
+				{
+					srcFactor = Wgpu.BlendFactor.Zero,
+					dstFactor = Wgpu.BlendFactor.One,
+					operation = Wgpu.BlendOperation.Add
+				}
+			};
+
+
+			ImGuiRenderer imGuiRenderer = new ImGuiRenderer(device, (colorTargets, Wgpu.TextureFormat.Depth32Float), prevWidth, prevHeight);
+
+
 			var swapChainDescriptor = new Wgpu.SwapChainDescriptor
 			{
 				usage = (uint)Wgpu.TextureUsage.RenderAttachment,
@@ -422,6 +442,21 @@ namespace WGPU.Tests
 
 			var lastFrameTime = startTime;
 
+			var io = ImGui.GetIO();
+
+			glfw.SetScrollCallback(window, (_, x, y) =>
+            {
+                io.MouseWheelH = (float)x;
+                io.MouseWheel = (float)y;
+            });
+
+			glfw.SetKeyCallback(window, (_, k, s, a, _) =>
+			{
+				io.AddKeyEvent(ImGui_ImplGlfw_KeyToImGuiKey(k), a == InputAction.Press);
+			});
+
+			glfw.SetCharCallback(window, (_, c) => io.AddInputCharacter(c));
+
 			while (!glfw.WindowShouldClose(window))
 			{
 				glfw.GetCursorPos(window, out double mouseX, out double mouseY);
@@ -442,6 +477,8 @@ namespace WGPU.Tests
 					depthTexture.DestroyResource();
 					depthTexture = device.CreateTexture(depthTextureDescriptor);
 					depthTextureView = depthTexture.CreateTextureView();
+
+					imGuiRenderer.WindowResized(width, height);
 				}
 
 
@@ -453,7 +490,33 @@ namespace WGPU.Tests
 
 				
 
-				
+				io.MousePos = new Vector2((float)mouseX, (float)mouseY);
+				io.MouseDown[0] = glfw.GetMouseButton(window, 0) == (int)InputAction.Press;
+				io.MouseDown[1] = glfw.GetMouseButton(window, 1) == (int)InputAction.Press;
+				io.MouseDown[2] = glfw.GetMouseButton(window, 2) == (int)InputAction.Press;
+
+                io.KeyCtrl = glfw.GetKey(window, Keys.ControlLeft) == (int)InputAction.Press ||
+                              glfw.GetKey(window, Keys.ControlRight) == (int)InputAction.Press;
+                io.KeyAlt = glfw.GetKey(window, Keys.AltLeft) == (int)InputAction.Press ||
+                              glfw.GetKey(window, Keys.AltRight) == (int)InputAction.Press;
+                io.KeyShift = glfw.GetKey(window, Keys.ShiftLeft) == (int)InputAction.Press ||
+                              glfw.GetKey(window, Keys.ShiftRight) == (int)InputAction.Press;
+                io.KeySuper = glfw.GetKey(window, Keys.SuperLeft) == (int)InputAction.Press ||
+                              glfw.GetKey(window, Keys.SuperRight) == (int)InputAction.Press;
+
+
+                imGuiRenderer.Update((float)(currentTime - lastFrameTime).TotalSeconds);
+				lastFrameTime = currentTime;
+
+
+                ImGui.Button("Test");
+                ImGui.Image(imGuiRenderer.GetOrCreateImGuiBinding(imageTexture),
+                    new Vector2(300, 300));
+                ImGui.ShowDemoWindow();
+
+
+                
+
 				Vector2 nrmMouseCoords = new Vector2(
 					(float)(mouseX * 1 - prevWidth  * 0.5f) / prevWidth,
 				    (float)(mouseY * 1 - prevHeight * 0.5f) / prevHeight
@@ -517,6 +580,8 @@ namespace WGPU.Tests
 				renderPass.SetBindGroup(0, bindGroup, Array.Empty<uint>());
 				renderPass.SetVertexBuffer(0, vertexBuffer, 0, (ulong)(vertices.Length * sizeof(Vertex)));
 				renderPass.Draw(3, 1, 0, 0);
+
+				imGuiRenderer.Render(renderPass);
 				renderPass.End();
 
 
@@ -577,5 +642,134 @@ namespace WGPU.Tests
 
 			return result;
 		}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		private static ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(Keys key)
+		{
+            return key switch
+            {
+                Keys.Tab => ImGuiKey.Tab,
+                Keys.Left => ImGuiKey.LeftArrow,
+                Keys.Right => ImGuiKey.RightArrow,
+                Keys.Up => ImGuiKey.UpArrow,
+                Keys.Down => ImGuiKey.DownArrow,
+                Keys.PageUp => ImGuiKey.PageUp,
+                Keys.PageDown => ImGuiKey.PageDown,
+                Keys.Home => ImGuiKey.Home,
+                Keys.End => ImGuiKey.End,
+                Keys.Insert => ImGuiKey.Insert,
+                Keys.Delete => ImGuiKey.Delete,
+                Keys.Backspace => ImGuiKey.Backspace,
+                Keys.Space => ImGuiKey.Space,
+                Keys.Enter => ImGuiKey.Enter,
+                Keys.Escape => ImGuiKey.Escape,
+                Keys.Apostrophe => ImGuiKey.Apostrophe,
+                Keys.Comma => ImGuiKey.Comma,
+                Keys.Minus => ImGuiKey.Minus,
+                Keys.Period => ImGuiKey.Period,
+                Keys.Slash => ImGuiKey.Slash,
+                Keys.Semicolon => ImGuiKey.Semicolon,
+                Keys.Equal => ImGuiKey.Equal,
+                Keys.LeftBracket => ImGuiKey.LeftBracket,
+                Keys.BackSlash => ImGuiKey.Backslash,
+                Keys.RightBracket => ImGuiKey.RightBracket,
+                Keys.GraveAccent => ImGuiKey.GraveAccent,
+                Keys.CapsLock => ImGuiKey.CapsLock,
+                Keys.ScrollLock => ImGuiKey.ScrollLock,
+                Keys.NumLock => ImGuiKey.NumLock,
+                Keys.PrintScreen => ImGuiKey.PrintScreen,
+                Keys.Pause => ImGuiKey.Pause,
+                Keys.Keypad0 => ImGuiKey.Keypad0,
+                Keys.Keypad1 => ImGuiKey.Keypad1,
+                Keys.Keypad2 => ImGuiKey.Keypad2,
+                Keys.Keypad3 => ImGuiKey.Keypad3,
+                Keys.Keypad4 => ImGuiKey.Keypad4,
+                Keys.Keypad5 => ImGuiKey.Keypad5,
+                Keys.Keypad6 => ImGuiKey.Keypad6,
+                Keys.Keypad7 => ImGuiKey.Keypad7,
+                Keys.Keypad8 => ImGuiKey.Keypad8,
+                Keys.Keypad9 => ImGuiKey.Keypad9,
+                Keys.KeypadDecimal => ImGuiKey.KeypadDecimal,
+                Keys.KeypadDivide => ImGuiKey.KeypadDivide,
+                Keys.KeypadMultiply => ImGuiKey.KeypadMultiply,
+                Keys.KeypadSubtract => ImGuiKey.KeypadSubtract,
+                Keys.KeypadAdd => ImGuiKey.KeypadAdd,
+                Keys.KeypadEnter => ImGuiKey.KeypadEnter,
+                Keys.KeypadEqual => ImGuiKey.KeypadEqual,
+                Keys.ShiftLeft => ImGuiKey.LeftShift,
+                Keys.ControlLeft => ImGuiKey.LeftCtrl,
+                Keys.AltLeft => ImGuiKey.LeftAlt,
+                Keys.SuperLeft => ImGuiKey.LeftSuper,
+                Keys.ShiftRight => ImGuiKey.RightShift,
+                Keys.ControlRight => ImGuiKey.RightCtrl,
+                Keys.AltRight => ImGuiKey.RightAlt,
+                Keys.SuperRight => ImGuiKey.RightSuper,
+                Keys.Menu => ImGuiKey.Menu,
+                Keys.Number0 => ImGuiKey._0,
+                Keys.Number1 => ImGuiKey._1,
+                Keys.Number2 => ImGuiKey._2,
+                Keys.Number3 => ImGuiKey._3,
+                Keys.Number4 => ImGuiKey._4,
+                Keys.Number5 => ImGuiKey._5,
+                Keys.Number6 => ImGuiKey._6,
+                Keys.Number7 => ImGuiKey._7,
+                Keys.Number8 => ImGuiKey._8,
+                Keys.Number9 => ImGuiKey._9,
+                Keys.A => ImGuiKey.A,
+                Keys.B => ImGuiKey.B,
+                Keys.C => ImGuiKey.C,
+                Keys.D => ImGuiKey.D,
+                Keys.E => ImGuiKey.E,
+                Keys.F => ImGuiKey.F,
+                Keys.G => ImGuiKey.G,
+                Keys.H => ImGuiKey.H,
+                Keys.I => ImGuiKey.I,
+                Keys.J => ImGuiKey.J,
+                Keys.K => ImGuiKey.K,
+                Keys.L => ImGuiKey.L,
+                Keys.M => ImGuiKey.M,
+                Keys.N => ImGuiKey.N,
+                Keys.O => ImGuiKey.O,
+                Keys.P => ImGuiKey.P,
+                Keys.Q => ImGuiKey.Q,
+                Keys.R => ImGuiKey.R,
+                Keys.S => ImGuiKey.S,
+                Keys.T => ImGuiKey.T,
+                Keys.U => ImGuiKey.U,
+                Keys.V => ImGuiKey.V,
+                Keys.W => ImGuiKey.W,
+                Keys.X => ImGuiKey.X,
+                Keys.Y => ImGuiKey.Y,
+                Keys.Z => ImGuiKey.Z,
+                Keys.F1 => ImGuiKey.F1,
+                Keys.F2 => ImGuiKey.F2,
+                Keys.F3 => ImGuiKey.F3,
+                Keys.F4 => ImGuiKey.F4,
+                Keys.F5 => ImGuiKey.F5,
+                Keys.F6 => ImGuiKey.F6,
+                Keys.F7 => ImGuiKey.F7,
+                Keys.F8 => ImGuiKey.F8,
+                Keys.F9 => ImGuiKey.F9,
+                Keys.F10 => ImGuiKey.F10,
+                Keys.F11 => ImGuiKey.F11,
+                Keys.F12 => ImGuiKey.F12,
+                _ => ImGuiKey.None,
+            };
+        }
 	}
 }
