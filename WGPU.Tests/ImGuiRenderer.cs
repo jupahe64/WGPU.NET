@@ -127,9 +127,9 @@ namespace WGPU.Tests
 
         private unsafe void CreateDeviceResources((ColorTargetState[] colorTargets, TextureFormat? depthFormat) outputDescription)
         {
-            _vertexBuffer = _gd.CreateBuffer("ImGui.NET Vertex Buffer", false, 10000, BufferUsage.Vertex | BufferUsage.CopyDst);
+            _vertexBuffer = _gd.CreateBuffer("ImGui.NET Vertex Buffer", false, NextValidBufferSize(10000), BufferUsage.Vertex | BufferUsage.CopyDst);
 
-            _indexBuffer = _gd.CreateBuffer("ImGui.NET Index Buffer", false, 2000, BufferUsage.Index | BufferUsage.CopyDst);
+            _indexBuffer = _gd.CreateBuffer("ImGui.NET Index Buffer", false, NextValidBufferSize(2000), BufferUsage.Index | BufferUsage.CopyDst);
 
             _projMatrixBuffer = _gd.CreateBuffer("ImGui.NET Projection Buffer", false, 64, BufferUsage.Uniform | BufferUsage.CopyDst);
 
@@ -557,20 +557,21 @@ namespace WGPU.Tests
             if (totalVBSize > _vertexBuffer.SizeInBytes)
             {
                 _vertexBuffer.DestroyResource();
-                _vertexBuffer = _gd.CreateBuffer("ImGui.Net VertexBuffer", false, (ulong)NextValidBufferSize((int)(totalVBSize * 1.5f)), BufferUsage.Vertex | BufferUsage.CopyDst);
+                _vertexBuffer = _gd.CreateBuffer("ImGui.NET Vertex Buffer", false, NextValidBufferSize((ulong)(totalVBSize * 1.5f)), BufferUsage.Vertex | BufferUsage.CopyDst);
             }
 
             uint totalIBSize = (uint)(draw_data.TotalIdxCount * sizeof(ushort));
             if (totalIBSize > _indexBuffer.SizeInBytes)
             {
                 _indexBuffer.DestroyResource();
-                _indexBuffer = _gd.CreateBuffer("ImGui.Net IndexBuffer", false, (uint)NextValidBufferSize((int)(totalIBSize * 1.5f)), BufferUsage.Index | BufferUsage.CopyDst);
+                _indexBuffer = _gd.CreateBuffer("ImGui.NET Index Buffer", false, NextValidBufferSize((ulong)(totalIBSize * 1.5f)), BufferUsage.Index | BufferUsage.CopyDst);
             }
 
             var queue = _gd.GetQueue();
 
-            var vertexData = new ImDrawVert[NextValidBufferSize(draw_data.TotalVtxCount)];
-            var indexData = new ushort[NextValidBufferSize(draw_data.TotalIdxCount)];
+
+            var vertexData = new ImDrawVert[draw_data.TotalVtxCount];
+            var indexData = new ushort[draw_data.TotalIdxCount];
 
             for (int i = 0; i < draw_data.CmdListsCount; i++)
             {
@@ -586,13 +587,14 @@ namespace WGPU.Tests
                 indexOffsetInElements += (uint)cmd_list.IdxBuffer.Size;
             }
 
-            queue.WriteBuffer<ImDrawVert>(
-                    _vertexBuffer,
-                    bufferOffset: 0,
-                    data: vertexData
-                );
 
-            queue.WriteBuffer<ushort>(
+            queue.WriteBufferAligned<ImDrawVert>(
+                _vertexBuffer,
+                bufferOffset: 0,
+                data: vertexData
+            );
+
+            queue.WriteBufferAligned<ushort>(
                 _indexBuffer,
                 bufferOffset: 0,
                 data: indexData
@@ -616,8 +618,8 @@ namespace WGPU.Tests
                 queue.WriteBuffer(_projMatrixBuffer, 0, span);
             }
 
-            cl.SetVertexBuffer(0, _vertexBuffer, 0, totalVBSize);
-            cl.SetIndexBuffer(_indexBuffer, IndexFormat.Uint16, 0, totalIBSize);
+            cl.SetVertexBuffer(0, _vertexBuffer, 0, _vertexBuffer.SizeInBytes);
+            cl.SetIndexBuffer(_indexBuffer, IndexFormat.Uint16, 0, _indexBuffer.SizeInBytes);
             cl.SetPipeline(_pipeline);
             cl.SetBindGroup(0, _mainResourceSet, Array.Empty<uint>());
 
@@ -650,13 +652,13 @@ namespace WGPU.Tests
                             }
                         }
 
-                        cl.SetScissorRect(
+                        if(cl.TrySetValidScissorRect(((uint)_windowWidth, (uint)_windowHeight),
                             (uint)pcmd.ClipRect.X,
                             (uint)pcmd.ClipRect.Y,
                             (uint)(pcmd.ClipRect.Z - pcmd.ClipRect.X),
-                            (uint)(pcmd.ClipRect.W - pcmd.ClipRect.Y));
+                            (uint)(pcmd.ClipRect.W - pcmd.ClipRect.Y)))
 
-                        cl.DrawIndexed(pcmd.ElemCount, 1, (uint)idx_offset, vtx_offset, 0);
+                            cl.DrawIndexed(pcmd.ElemCount, 1, (uint)idx_offset, vtx_offset, 0);
                     }
 
                     idx_offset += (int)pcmd.ElemCount;
@@ -692,7 +694,7 @@ namespace WGPU.Tests
             }
         }
 
-        private static int NextValidBufferSize(int size) => size - size % 64 + 64;
+        private static ulong NextValidBufferSize(ulong size) => (size+15) / 16 * 16;
 
         private struct ResourceSetInfo
         {
@@ -704,6 +706,42 @@ namespace WGPU.Tests
                 ImGuiBinding = imGuiBinding;
                 ResourceSet = resourceSet;
             }
+        }
+    }
+
+
+    internal static class RenderPassEncoderExtensions
+    {
+        public static bool TrySetValidViewPortRect(this RenderPassEncoder self, (uint w, uint h) fullViewportSize, float x, float y, float width, float height, float minDepth, float maxDepth)
+        {
+            if (x + width > fullViewportSize.w)
+                width -= (x + width - fullViewportSize.w);
+
+            if (y + height > fullViewportSize.h)
+                height -= (y + height - fullViewportSize.h);
+
+            if (width <= 0 || height <= 0)
+                return false;
+
+            self.SetViewport(x, y, width, height, minDepth, maxDepth);
+
+            return true;
+        }
+
+        public static bool TrySetValidScissorRect(this RenderPassEncoder self, (uint w, uint h) fullViewportSize, uint x, uint y, uint width, uint height)
+        {
+            if (x + width > fullViewportSize.w)
+                width -= (x + width - fullViewportSize.w);
+
+            if (y + height > fullViewportSize.h)
+                height -= (y + height - fullViewportSize.h);
+
+            if (width <= 0 || height <= 0)
+                return false;
+
+            self.SetScissorRect(x, y, width, height);
+
+            return true;
         }
     }
 }

@@ -509,10 +509,10 @@ namespace WGPU.Tests
 				lastFrameTime = currentTime;
 
 
-                ImGui.Button("Test");
-                ImGui.Image(imGuiRenderer.GetOrCreateImGuiBinding(imageTexture),
-                    new Vector2(300, 300));
-                ImGui.ShowDemoWindow();
+				ImGui.Button("Test");
+				ImGui.Image(imGuiRenderer.GetOrCreateImGuiBinding(imageTexture),
+					new Vector2(300, 300));
+				ImGui.ShowDemoWindow();
 
 
                 
@@ -771,5 +771,5 @@ namespace WGPU.Tests
                 _ => ImGuiKey.None,
             };
         }
-	}
+    }
 }
