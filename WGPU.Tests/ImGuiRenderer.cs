@@ -80,7 +80,7 @@ namespace WGPU.Tests
         /// <param name="outputDescription">The output format.</param>
         /// <param name="width">The initial width of the rendering target. Can be resized.</param>
         /// <param name="height">The initial height of the rendering target. Can be resized.</param>
-        public ImGuiRenderer(Device gd, (ColorTargetState[] colorTargets, TextureFormat depthFormat) outputDescription, int width, int height)
+        public ImGuiRenderer(Device gd, (ColorTargetState[] colorTargets, TextureFormat? depthFormat) outputDescription, int width, int height)
             : this(gd, outputDescription, width, height, ColorSpaceHandling.Legacy) { }
 
         /// <summary>
@@ -91,7 +91,7 @@ namespace WGPU.Tests
         /// <param name="width">The initial width of the rendering target. Can be resized.</param>
         /// <param name="height">The initial height of the rendering target. Can be resized.</param>
         /// <param name="colorSpaceHandling">Identifies how the renderer should treat vertex colors.</param>
-        public ImGuiRenderer(Device gd, (ColorTargetState[] colorTargets, TextureFormat depthFormat) outputDescription, int width, int height, ColorSpaceHandling colorSpaceHandling)
+        public ImGuiRenderer(Device gd, (ColorTargetState[] colorTargets, TextureFormat? depthFormat) outputDescription, int width, int height, ColorSpaceHandling colorSpaceHandling)
         {
             _gd = gd;
             _assembly = typeof(ImGuiRenderer).GetTypeInfo().Assembly;
@@ -125,7 +125,7 @@ namespace WGPU.Tests
             Dispose();
         }
 
-        private unsafe void CreateDeviceResources((ColorTargetState[] colorTargets, TextureFormat depthFormat) outputDescription)
+        private unsafe void CreateDeviceResources((ColorTargetState[] colorTargets, TextureFormat? depthFormat) outputDescription)
         {
             _vertexBuffer = _gd.CreateBuffer("ImGui.NET Vertex Buffer", false, 10000, BufferUsage.Vertex | BufferUsage.CopyDst);
 
@@ -238,9 +238,9 @@ namespace WGPU.Tests
                     mask = uint.MaxValue,
                     alphaToCoverageEnabled = false
                 },
-                depthStencilState: new DepthStencilState
+                depthStencilState: outputDescription.depthFormat==null ? null : new DepthStencilState
                 {
-                    format = outputDescription.depthFormat,
+                    format = outputDescription.depthFormat.Value,
                     depthCompare = CompareFunction.Always,
                     stencilBack = new Wgpu.StencilFaceState
                     {
